@@ -3,6 +3,8 @@ kind: Pod
 metadata:
   name: init-demo
   namespace: homework
+  labels:
+    app: HW-1
 spec:
   containers:
   - name: nginx
