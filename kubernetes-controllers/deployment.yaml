@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: init-demo
+  namespace: homework
+  labels:
+    app: HW-2
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: dormitory
+          mountPath: /homework
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "rm /usr/share/nginx/html/index.html && ln -s /homework/index.html /usr/share/nginx/html/index.html"]
+          preStop:
+            exec:
+              command: ["/bin/sh","-c","rm /homework/index.html"]
+      # These containers are run during pod initialization
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - /homework/index.html
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      nodeSelector:
+        homework: "true"
+      initContainers:
+      - name: install
+        image: busybox:1.28
+        command:
+        - wget
+        - "-O"
+        - "/init/index.html"
+        - http://info.cern.ch
+        volumeMounts:
+        - name: dormitory
+          mountPath: "/init"
+      dnsPolicy: Default
+      volumes:
+      - name: dormitory
+        emptyDir: {}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
