@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: init-demo
+  namespace: homework
+  labels:
+    app: HW-4
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: HW-4
+  template:
+    metadata:
+      labels:
+        app: HW-4
+    spec:
+      initContainers:
+      - name: install
+        image: busybox:1.28
+        command:
+        - wget
+        - "-O"
+        - "/init/index.html"
+        - http://info.cern.ch
+        volumeMounts:
+        - name: dormitory-volume
+          mountPath: "/init"
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: dormitory-volume
+          mountPath: /homework
+        - name: nginx-volume
+          mountPath: /etc/nginx
+          readOnly: true
+        - name: additional-volume
+          mountPath: /homework/conf
+          readOnly: true
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh","-c","rm /homework/index.html"]
+      # These containers are run during pod initialization
+        readinessProbe:
+          httpGet:
+            path: /index.html
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      dnsPolicy: Default
+      volumes:
+      - name: dormitory-volume
+        persistentVolumeClaim:
+          claimName: pvc-claim-cm-hw-4
+      - name: nginx-volume
+        configMap:
+          name: nginx-configmap
+          items:
+          - key: nginx.conf
+            path: nginx.conf
+      - name: additional-volume
+        configMap:
+          name: cm-conf
+          items:
+          - key: conf-file
+            path: file
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
