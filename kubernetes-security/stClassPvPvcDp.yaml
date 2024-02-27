@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: homework
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-volume-hw-5
+  labels:
+    type: local
+spec:
+  storageClassName: local-storage
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-claim-cm-hw-5
+  namespace: homework
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: init-demo
+  namespace: homework
+  labels:
+    app: HW-5
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: HW-5
+  template:
+    metadata:
+      labels:
+        app: HW-5
+    spec:
+      initContainers:
+      - name: install
+        image: busybox:1.28
+        command:
+        - wget
+        - "-O"
+        - "/init/index.html"
+        - http://info.cern.ch
+        volumeMounts:
+        - name: dormitory-volume
+          mountPath: "/init"
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: dormitory-volume
+          mountPath: /homework
+        - name: nginx-volume
+          mountPath: /etc/nginx
+          readOnly: true
+        - name: additional-volume
+          mountPath: /homework/conf
+          readOnly: true
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh","-c", "curl -k https://178.62.239.82:6443/metrics --header \"Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" > /homework/metrics.html"]
+          preStop:
+            exec:
+              command: ["/bin/sh","-c","rm /homework/index.html"]
+      # These containers are run during pod initialization
+        readinessProbe:
+          httpGet:
+            path: /index.html
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      serviceAccountName: monitoring
+      dnsPolicy: Default
+      volumes:
+      - name: dormitory-volume
+        persistentVolumeClaim:
+          claimName: pvc-claim-cm-hw-5
+      - name: nginx-volume
+        configMap:
+          name: nginx-configmap
+          items:
+          - key: nginx.conf
+            path: nginx.conf
+      - name: additional-volume
+        configMap:
+          name: cm-conf
+          items:
+          - key: conf-file
+            path: file
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
